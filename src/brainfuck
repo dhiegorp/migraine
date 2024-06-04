@@ -1,0 +1,280 @@
+const std = @import("std");
+
+
+
+
+
+pub const InterpreterDiagnostics = struct { failed_opcode: usize, detailed_message: []const u8 };
+
+pub const InterpreterPanic = error{
+    MemoryRangeUnderflow,
+    MemoryRangeOverflow,
+    UnbalancedJumpOperation,
+    MappingError,
+};
+
+///
+/// Initializes the tape using the given allocator,
+/// and sets the cell value with zero
+///
+pub fn initMemory(allocator: std.mem.Allocator, cell_size: usize) ![]u8 {
+    const cells = try allocator.alloc(u8, cell_size); //when alloc is used, the cells are set to undefined value, but we need that every cell is initiated with zero
+    @memset(cells, 0); //sets everything to 0
+    return cells;
+}
+
+///
+/// Verify if jumping operations are balanced through the given program, mapping the jumping pairs positions during the checking operation.
+/// returns a std.AutoHashMap(usize, usize), mapping the index of the opening bracket '[' with the closing ']' and vice versa on the given 'program' string.
+///
+pub fn jumpMapping(allocator: std.mem.Allocator, map: *std.AutoHashMap(usize, usize), program: []const u8, diagnostics: *InterpreterDiagnostics) !void {
+    var control = std.ArrayList(usize).init(allocator);
+    defer control.deinit();
+
+    for (program, 0..) |opcode, index| {
+        switch (opcode) {
+            '[' => {
+                try control.append(index);
+            },
+            ']' => {
+                if (control.popOrNull()) |opening_idx| {
+                    //double link '[' -> ']' and '[' <- ']'
+                    try map.putNoClobber(opening_idx, index);
+                    try map.putNoClobber(index, opening_idx);
+                } else {
+                    diagnostics.failed_opcode = index;
+                    diagnostics.detailed_message = "Unbalanced jump detected at position";
+                    return InterpreterPanic.UnbalancedJumpOperation;
+                }
+            },
+            else => {}, //ignore other symbols
+        }
+    }
+
+    //if the control stack has someone here, than brackets are unbalanced and an error should be returned
+    if (control.popOrNull()) |err_idx| {
+        diagnostics.failed_opcode = err_idx;
+        diagnostics.detailed_message = "Unbalanced jump detected at position";
+        return InterpreterPanic.UnbalancedJumpOperation;
+    }
+}
+
+// pub fn main() !void {
+//     const allocator = std.heap.page_allocator;
+//     const program = "+[+][[+.]";
+
+//     var mapping = std.AutoHashMap(usize, usize).init(allocator);
+//     defer mapping.deinit();
+
+//     var diag = InterpreterDiagnostics{ .detailed_message = undefined, .failed_opcode = undefined };
+
+//     const ret = jumpMapping(allocator, &mapping, program, &diag);
+//     std.log.info("{any} {s}", diag);
+//     std.log.info("{!}", .{ret});
+// }
+
+pub fn main() !void {
+    var allocator = std.heap.page_allocator;
+
+    var tape = try initMemory(allocator, 30000);
+    defer allocator.free(tape);
+
+    var mapping = std.AutoHashMap(usize, usize).init(allocator);
+    defer mapping.deinit();
+
+    var diag = InterpreterDiagnostics{ .detailed_message = undefined, .failed_opcode = undefined };
+
+    var head: usize = 0;
+    const program = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
+    var prog_instr: usize = 0;
+
+    std.debug.print("Migraine - Just Another Brainfuck Interpreter v0.1a\n", .{});
+    std.debug.print("\tProgram: {s}\n", .{program});
+    std.debug.print("Running...\n", .{});
+
+    try jumpMapping(allocator, &mapping, program, &diag);
+
+    while (prog_instr < program.len) {
+        const opcode = program[prog_instr];
+
+        switch (opcode) {
+            '+' => tape[head] +%= 1, //wraparround - allow overflow. maybe should be used as interpreter behavior setup option (allowing or not)
+            '-' => tape[head] -%= 1, //wraparround - allow overflow. maybe should be used as interpreter behavior setup option (allowing or not)
+            '>' => {
+                if (head == tape.len - 1) {
+                    diag.detailed_message = "Memory Range Overflow at position";
+                    diag.failed_opcode = prog_instr;
+                    return InterpreterPanic.MemoryRangeOverflow;
+                }
+                head += 1;
+            },
+            '<' => {
+                if (head == 0) {
+                    diag.detailed_message = "Memory Range Underflow at position";
+                    diag.failed_opcode = prog_instr;
+                    return InterpreterPanic.MemoryRangeUnderflow;
+                }
+                head -= 1;
+            },
+            '.' => std.debug.print("{c}", .{tape[head]}),
+            ']' => {
+                if (tape[head] > 0) {
+                    //get the matching position ']'
+                    if (mapping.get(prog_instr)) |matching_pos| {
+                        prog_instr = matching_pos; //program counter points to '['
+                        continue;
+                    } else {
+                        diag.detailed_message = "Impossible to find the jumping match for the instruction";
+                        diag.failed_opcode = prog_instr;
+                        return InterpreterPanic.MappingError;
+                    }
+                }
+            },
+            '[' => {
+                if (tape[head] == 0) {
+                    if (mapping.get(prog_instr)) |matching_pos| {
+                        prog_instr = matching_pos; //program counter points to ']'
+                        continue;
+                    } else {
+                        diag.detailed_message = "Impossible to find the jumping match for the instruction";
+                        diag.failed_opcode = prog_instr;
+                        return InterpreterPanic.MappingError;
+                    }
+                }
+            },
+            else => {}, //ignore other instructions
+
+        }
+        prog_instr += 1;
+    }
+}
+
+// pub fn temp() !void {
+//     var allocator = std.heap.page_allocator;
+//     var tape = try initMemory(allocator, 30000);
+//     defer allocator.free(tape);
+
+//     var head: usize = 0;
+
+//     var program = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
+
+//     var prog_instr: usize = 0;
+//     var opcode: u8 = undefined;
+//     var last_opcode: u8 = undefined;
+
+//     var matching_pos: usize = 0;
+
+//     //var input = "";
+
+//     while (prog_instr < program.len) {
+//         std.debug.print("matching_pos: {d}, prog_instr: {d}\n", .{ matching_pos, prog_instr });
+//         //std.debug.print("=======================\n", .{});
+//         //std.debug.print("\tprog_instr: {d},\n\t head: {d},\n\t tape[head:{d}]=(char: '{c}', bit: {b}),\n\t matching_pos={d},\n\t jmp_counter: {d}\n", .{ prog_instr, head, head, tape[head], tape[head], matching_pos, jmp_counter });
+//         //std.debug.print("=======================\n", .{});
+//         opcode = program[prog_instr];
+//         //std.debug.print("\topcode {c}\n", .{opcode});
+//         switch (opcode) {
+//             '+' => tape[head] +%= 1, //wraparround - allow overflow. maybe should be used as interpreter behavior setup option (allowing or not)
+//             '-' => tape[head] -%= 1, //wraparround - allow overflow. maybe should be used as interpreter behavior setup option (allowing or not)
+//             '>' => {
+//                 if (head == tape.len - 1) {
+//                     return InterpreterPanic.MemoryRangeOverflow;
+//                 }
+//                 head += 1;
+//             },
+//             '<' => {
+//                 if (head == 0) {
+//                     return InterpreterPanic.MemoryRangeUnderflow;
+//                 }
+//                 head -= 1;
+//             },
+//             '.' => std.debug.print("{c}", .{tape[head]}),
+//             ']' => {
+//                 std.debug.print("] :{d}\n", .{prog_instr});
+//                 if (tape[head] > 0) {
+//                     if (program[matching_pos] == '[') {
+//                         prog_instr = matching_pos;
+//                         last_opcode = opcode;
+//                         continue;
+//                     } else {
+//                         return InterpreterPanic.UnbalancedJumpOperation;
+//                     }
+//                 }
+//             },
+//             '[' => {
+//                 std.debug.print("[ :{d}\n\t", .{prog_instr});
+//                 matching_pos = prog_instr;
+//                 if (tape[head] == 0) {
+//                     //try jump(program[0..], &prog_instr);
+//                     last_opcode = opcode;
+//                     continue;
+//                 }
+//             },
+//             else => {}, //ignore other instructions
+//         }
+//         last_opcode = opcode;
+//         prog_instr += 1; //evaluate if this position is ok.
+//     }
+// }
+
+const testing = std.testing;
+
+test "empty program should not register any jump mappings" {
+    const givenProgram = "";
+    const expected = 0;
+    var diag = InterpreterDiagnostics{ .detailed_message = undefined, .failed_opcode = undefined };
+
+    var mapping = std.AutoHashMap(usize, usize).init(testing.allocator);
+    defer mapping.deinit();
+
+    try jumpMapping(testing.allocator, &mapping, givenProgram, &diag);
+
+    try testing.expect(expected == mapping.count());
+}
+test "balanced brackets: program with deep structure must result in hashmap with all 'linked jumps'" {
+    const givenProgram = "[[[[[[[[[[[]]]]]]]]]][[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]][[[[[[[[[]]]]]]]]]][[[[[[[[[[]]]]]]]]]][[[[[[[[[[]]]]]]]]]][[[[[]]]]]";
+    const expectedLinks = 150;
+    var diag = InterpreterDiagnostics{ .detailed_message = undefined, .failed_opcode = undefined };
+
+    var mapping = std.AutoHashMap(usize, usize).init(testing.allocator);
+    defer mapping.deinit();
+
+    try jumpMapping(testing.allocator, &mapping, givenProgram, &diag);
+
+    try testing.expectEqual(expectedLinks, mapping.count());
+}
+test "balanced brackets: program with simple structure should result in hashmap with 'linked jumps'" {
+    const givenProgram = "[+]";
+    var diag = InterpreterDiagnostics{ .detailed_message = undefined, .failed_opcode = undefined };
+
+    var mapping = std.AutoHashMap(usize, usize).init(testing.allocator);
+    defer mapping.deinit();
+
+    try jumpMapping(testing.allocator, &mapping, givenProgram, &diag);
+
+    try testing.expectEqual(2, mapping.get(0).?);
+    try testing.expectEqual(0, mapping.get(2).?);
+}
+
+test "unbalanced brackets: must result in error" {
+    const givenProgram = "++[++++><><><>><+++<<-][+[]>++++";
+    const expectedPosition: usize = 23;
+
+    var diag = InterpreterDiagnostics{ .detailed_message = undefined, .failed_opcode = undefined };
+    var mapping = std.AutoHashMap(usize, usize).init(testing.allocator);
+    defer mapping.deinit();
+
+    try testing.expectError(InterpreterPanic.UnbalancedJumpOperation, jumpMapping(testing.allocator, &mapping, givenProgram, &diag));
+    try testing.expectEqual(expectedPosition, diag.failed_opcode);
+}
+
+test "unbalanced brackets: inverted jump opcodes must result in error" {
+    const givenProgram = "+][.";
+
+    var diag = InterpreterDiagnostics{ .detailed_message = undefined, .failed_opcode = undefined };
+    var mapping = std.AutoHashMap(usize, usize).init(testing.allocator);
+    defer mapping.deinit();
+
+    try testing.expectError(InterpreterPanic.UnbalancedJumpOperation, jumpMapping(testing.allocator, &mapping, givenProgram, &diag));
+    try testing.expectEqual(1, diag.failed_opcode);
+}
