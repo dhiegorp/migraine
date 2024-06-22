@@ -5,7 +5,6 @@ const Reader = std.fs.File.Reader;
 const Allocator = std.mem.Allocator;
 const testing = std.testing;
 const mem = @import("memory.zig");
-const logger = std.log;
 
 pub const InterpreterDiagnostics = struct { failed_opcode: usize, detailed_message: []const u8 };
 
@@ -27,8 +26,9 @@ fn report(message: []const u8, failed_opcode: usize, diagnostics: ?*InterpreterD
 }
 
 ///
-/// Analyze if jumping operations are balanced through the entire program, mapping the jumping pairs positions.
+/// Eagerly maps the jumping pairs positions, analyzing if jumping operations are balanced throughout the entire program.
 /// It populates a std.AutoHashMap(usize, usize) with the mapping of the indexes of opening brackets '[' and the equivalent closing instructions ']', and vice versa, based on the given 'program' string.
+/// Maybe its possible to optimize it.
 ///
 fn mapJumpOperations(allocator: std.mem.Allocator, map: *std.AutoHashMap(usize, usize), program: []const u8, diagnostics: ?*InterpreterDiagnostics) !void {
     var control = std.ArrayList(usize).init(allocator);
@@ -87,6 +87,10 @@ pub const Interpreter = struct {
         }
     }
 
+    ///
+    /// Execute the given program.
+    /// Ideally it should use a 'step' function to allow 'interactive debugging'.
+    ///
     pub fn eval(self: *Interpreter, program: []const u8, input: anytype, output: anytype, diagnostics: ?*InterpreterDiagnostics) anyerror!void {
         if (self.allocator) |alloc| {
             var mapping = std.AutoHashMap(usize, usize).init(alloc);
@@ -95,10 +99,19 @@ pub const Interpreter = struct {
             try mapJumpOperations(alloc, &mapping, program, diagnostics);
 
             var pc: usize = 0;
-
             while (pc < program.len) {
                 const opcode = program[pc];
                 switch (opcode) {
+                    '<' => {
+                        if (self.memory) |memory| {
+                            try memory.shiftLeft();
+                        }
+                    },
+                    '>' => {
+                        if (self.memory) |memory| {
+                            try memory.shiftRight();
+                        }
+                    },
                     '+' => {
                         if (self.memory) |memory| {
                             try memory.increment();
@@ -180,9 +193,10 @@ pub const Interpreter = struct {
                         }
                     },
                     else => {
-                        //every other symbol must be ignored
+                        //every other symbol MUST be ignored and should be interpreted as comments
                     },
                 }
+                pc += 1;
             }
         }
     }
@@ -268,5 +282,5 @@ test "eval 'hello world' program should output correctly" {
     try interpreter.eval(givenProgram, io.getStdIn().reader(), output.writer(), null);
 
     const actualString = try output.toOwnedSlice();
-    try testing.expectEqualStrings("Hello World!\n", actualString);
+    try testing.expectEqualStrings("Hello, World!\n", actualString);
 }
