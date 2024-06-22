@@ -4,7 +4,6 @@ const io = std.io;
 
 pub fn main() !void {
     const givenProgram = ">++++++++[<+++++++++>-]<.>++++[<+++++++>-]<+.+++++++..+++.>>++++++[<+++++++>-]<++.------------.>++++++[<+++++++++>-]<+.<.+++.------.--------.>>>++++[<++++++++>-]<+.";
-    //const givenProgram = "+++++++++++++++++++++++++++++++++.";
 
     var output = std.ArrayList(u8).init(std.heap.page_allocator);
     defer output.deinit();
