@@ -26,6 +26,19 @@ fn report(message: []const u8, failed_opcode: usize, diagnostics: ?*InterpreterD
 }
 
 ///
+/// Load the program from a file, given the path
+///
+fn loadProgram(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
+    const file = try std.fs.cwd().openFile(path, .{});
+    defer file.close();
+
+    const metadata = try file.stat();
+
+    const program = try file.readToEndAlloc(allocator, metadata.size);
+    return program;
+}
+
+///
 /// Eagerly maps the jumping pairs positions, analyzing if jumping operations are balanced throughout the entire program.
 /// It populates a std.AutoHashMap(usize, usize) with the mapping of the indexes of opening brackets '[' and the equivalent closing instructions ']', and vice versa, based on the given 'program' string.
 /// Maybe its possible to optimize it.
@@ -99,37 +112,16 @@ pub const Interpreter = struct {
             try mapJumpOperations(alloc, &mapping, program, diagnostics);
 
             var pc: usize = 0;
-            while (pc < program.len) {
-                const opcode = program[pc];
-                switch (opcode) {
-                    '<' => {
-                        if (self.memory) |memory| {
-                            try memory.shiftLeft();
-                        }
-                    },
-                    '>' => {
-                        if (self.memory) |memory| {
-                            try memory.shiftRight();
-                        }
-                    },
-                    '+' => {
-                        if (self.memory) |memory| {
-                            try memory.increment();
-                        } else {
-                            report("Impossible to increment. Memory was not initialized.", pc, diagnostics);
-                            return InterpreterPanic.MemoryNotInitialized;
-                        }
-                    },
-                    '-' => {
-                        if (self.memory) |memory| {
-                            try memory.decrement();
-                        } else {
-                            report("Impossible to decrement. Memory was not initialized.", pc, diagnostics);
-                            return InterpreterPanic.MemoryNotInitialized;
-                        }
-                    },
-                    ']' => {
-                        if (self.memory) |memory| {
+
+            if (self.memory) |memory| {
+                while (pc < program.len) {
+                    const opcode = program[pc];
+                    switch (opcode) {
+                        '<' => try memory.shiftLeft(),
+                        '>' => try memory.shiftRight(),
+                        '+' => try memory.increment(),
+                        '-' => try memory.decrement(),
+                        ']' => {
                             if (try memory.read()) |cell_value| {
                                 if (cell_value > 0) {
                                     if (mapping.get(pc)) |matching_pos| {
@@ -144,13 +136,8 @@ pub const Interpreter = struct {
                                 report("Impossible to evaluate jump. A problem occurred while accessing the current memory cell.", pc, diagnostics);
                                 return InterpreterPanic.MemoryAccessError;
                             }
-                        } else {
-                            report("Impossible to evaluate jump. Memory was not initialized.", pc, diagnostics);
-                            return InterpreterPanic.MemoryNotInitialized;
-                        }
-                    },
-                    '[' => {
-                        if (self.memory) |memory| {
+                        },
+                        '[' => {
                             if (try memory.read()) |cell_value| {
                                 if (cell_value == 0) {
                                     if (mapping.get(pc)) |matching_pos| {
@@ -165,38 +152,29 @@ pub const Interpreter = struct {
                                 report("Impossible to evaluate jump. A problem occurred while accessing the current memory cell.", pc, diagnostics);
                                 return InterpreterPanic.MemoryAccessError;
                             }
-                        } else {
-                            report("Impossible to evaluate jump:  Memory was not initialized.", pc, diagnostics);
-                            return InterpreterPanic.MemoryNotInitialized;
-                        }
-                    },
-                    '.' => {
-                        if (self.memory) |memory| {
+                        },
+                        '.' => {
                             if (try memory.read()) |cell_value| {
                                 try output.writeByte(cell_value);
                             } else {
                                 report("Impossible to output value. A problem occurred while accessing the current memory cell.", pc, diagnostics);
                                 return InterpreterPanic.MemoryAccessError;
                             }
-                        } else {
-                            report("Impossible to read from memory:  Memory was not initialized.", pc, diagnostics);
-                            return InterpreterPanic.MemoryNotInitialized;
-                        }
-                    },
-                    ',' => {
-                        if (self.memory) |memory| {
-                            const byte = input.readByte() catch 0; //in case of input stream error, zero should be written
+                        },
+                        ',' => {
+                            const byte = input.readByte() catch 0;
                             try memory.write(byte);
-                        } else {
-                            report("Impossible to write to memory:  Memory was not initialized", pc, diagnostics);
-                            return InterpreterPanic.MemoryNotInitialized;
-                        }
-                    },
-                    else => {
-                        //every other symbol MUST be ignored and should be interpreted as comments
-                    },
+                        },
+                        else => {
+                            //every other symbol MUST be ignored and should be interpreted as comments
+                        },
+                    }
+                    pc += 1;
                 }
-                pc += 1;
+            } else {
+                //TODO changing report to not rely on opcode references
+                report("Impossible to increment. Memory was not initialized.", 0, diagnostics);
+                return InterpreterPanic.MemoryNotInitialized;
             }
         }
     }
@@ -274,7 +252,7 @@ test "eval 'hello world' program should output correctly" {
     const givenProgram = ">++++++++[<+++++++++>-]<.>++++[<+++++++>-]<+.+++++++..+++.>>++++++[<+++++++>-]<++.------------.>++++++[<+++++++++>-]<+.<.+++.------.--------.>>>++++[<++++++++>-]<+.";
 
     var output = std.ArrayList(u8).init(testing.allocator);
-    defer output.deinit();
+    //defer output.deinit();
 
     const interpreter = try Interpreter.init(testing.allocator);
     defer interpreter.deinit();
@@ -282,5 +260,37 @@ test "eval 'hello world' program should output correctly" {
     try interpreter.eval(givenProgram, io.getStdIn().reader(), output.writer(), null);
 
     const actualString = try output.toOwnedSlice();
-    try testing.expectEqualStrings("Hello, World!\n", actualString);
+    try testing.expectEqualStrings("Hello, World!", actualString);
+}
+
+test "loadProgram on an unvalid path should return an error" {
+    //given an empty path should result in error
+    try testing.expectError(std.fs.File.OpenError.FileNotFound, loadProgram(testing.allocator, ""));
+
+    const unvalid_path = "./x/y/mockery.bf";
+
+    //given an non-existant path should result in error
+    try testing.expectError(std.fs.File.OpenError.FileNotFound, loadProgram(testing.allocator, unvalid_path));
+}
+
+fn mkTestFile(tempDir: testing.TmpDir, name: []const u8, content: []const u8) !std.fs.File {
+    var tempFile = try tempDir.dir.createFile(name, .{});
+    try tempFile.writeAll(content);
+    return tempFile;
+}
+
+test "loadProgram on a valid file should read program content" {
+    var dir = testing.tmpDir(.{});
+    defer dir.cleanup();
+
+    const expectedFileName = "countdown.bf";
+
+    const content = "++++[>+++++<-]>[<+++++>-]+<+[>[>+>+<<-]++>>[<<+>>-]>>>[-]++>[-]+>>>+[[-]++++++>>>]<<<[[<++++++++<++>>-]+<.<[>----<-]<]<<[>>>>>[>>>[-]+++++++++<[>-<-]+++++++++>[-[<->-]+[<<<]]<[>+<-]>]<<-]<<-]";
+
+    var programFile = try mkTestFile(dir, expectedFileName, content);
+    defer programFile.close();
+
+    const loaded = try loadProgram(testing.allocator, dir.sub_path ++ "/" ++ expectedFileName);
+
+    try testing.expectEqualStrings(content, loaded);
 }

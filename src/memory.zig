@@ -90,12 +90,10 @@ pub const StaticSizeMemory = struct {
 
     pub fn shiftLeft(self: *StaticSizeMemory) !void {
         if (self.head) |head| {
-            //logger.debug("[MEM][SHIFT_LEFT] FROM HEAD: {d} ", .{head});
             if (head == 0) {
                 return MemoryPanic.RangeUnderflow;
             }
             self.head = head - 1;
-            //logger.debug("[MEM][SHIFT_LEFT] TO HEAD: {d} ", .{head});
             return;
         }
         return MemoryPanic.ShiftOperationError;
@@ -124,6 +122,10 @@ pub const StaticSizeMemory = struct {
         return MemoryPanic.ReadOperationError;
     }
 };
+
+//
+// TESTS
+//
 
 test "StaticSizeMemory - currentAddress should return the exact value from the head" {
     var mem = try StaticSizeMemory.init(testing.allocator, 10);
