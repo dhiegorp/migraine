@@ -28,7 +28,8 @@ fn report(message: []const u8, failed_opcode: usize, diagnostics: ?*InterpreterD
 ///
 /// Load the program from a file, given the path
 ///
-fn loadProgram(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
+pub fn loadProgram(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
+    std.debug.print("vai {s}", .{path});
     const file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
@@ -252,7 +253,7 @@ test "eval 'hello world' program should output correctly" {
     const givenProgram = ">++++++++[<+++++++++>-]<.>++++[<+++++++>-]<+.+++++++..+++.>>++++++[<+++++++>-]<++.------------.>++++++[<+++++++++>-]<+.<.+++.------.--------.>>>++++[<++++++++>-]<+.";
 
     var output = std.ArrayList(u8).init(testing.allocator);
-    //defer output.deinit();
+    defer output.deinit();
 
     const interpreter = try Interpreter.init(testing.allocator);
     defer interpreter.deinit();
@@ -263,10 +264,12 @@ test "eval 'hello world' program should output correctly" {
     try testing.expectEqualStrings("Hello, World!", actualString);
 }
 
-test "loadProgram on an unvalid path should return an error" {
+test "loadProgram on an empty path should return an error" {
     //given an empty path should result in error
     try testing.expectError(std.fs.File.OpenError.FileNotFound, loadProgram(testing.allocator, ""));
+}
 
+test "loadProgram on an non existant path should return an error" {
     const unvalid_path = "./x/y/mockery.bf";
 
     //given an non-existant path should result in error
@@ -280,17 +283,20 @@ fn mkTestFile(tempDir: testing.TmpDir, name: []const u8, content: []const u8) !s
 }
 
 test "loadProgram on a valid file should read program content" {
-    var dir = testing.tmpDir(.{});
-    defer dir.cleanup();
+    var tmp_dir = testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
 
     const expectedFileName = "countdown.bf";
 
     const content = "++++[>+++++<-]>[<+++++>-]+<+[>[>+>+<<-]++>>[<<+>>-]>>>[-]++>[-]+>>>+[[-]++++++>>>]<<<[[<++++++++<++>>-]+<.<[>----<-]<]<<[>>>>>[>>>[-]+++++++++<[>-<-]+++++++++>[-[<->-]+[<<<]]<[>+<-]>]<<-]<<-]";
-
-    var programFile = try mkTestFile(dir, expectedFileName, content);
+    var programFile = try mkTestFile(tmp_dir, expectedFileName, content);
     defer programFile.close();
 
-    const loaded = try loadProgram(testing.allocator, dir.sub_path ++ "/" ++ expectedFileName);
+    var pathToProgram = try tmp_dir.dir.realpathAlloc(testing.allocator, ".");
+    pathToProgram = try std.fmt.allocPrint(testing.allocator, "{s}/{s}", .{ pathToProgram, expectedFileName });
+    defer testing.allocator.free(pathToProgram);
 
-    try testing.expectEqualStrings(content, loaded);
+    const loaded = try loadProgram(testing.allocator, pathToProgram);
+
+    try testing.expectEqualStrings(content ++ ".", loaded);
 }
