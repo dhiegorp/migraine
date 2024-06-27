@@ -285,7 +285,7 @@ fn mkTestFile(tempDir: testing.TmpDir, name: []const u8, content: []const u8) !s
 
 test "loadProgram on a valid file should read program content" {
     var tmp_dir = testing.tmpDir(.{});
-    //defer tmp_dir.cleanup();
+    defer tmp_dir.cleanup();
 
     const expectedFileName = "countdown.bf";
 
