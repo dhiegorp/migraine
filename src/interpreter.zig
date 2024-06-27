@@ -29,7 +29,6 @@ fn report(message: []const u8, failed_opcode: usize, diagnostics: ?*InterpreterD
 /// Load the program from a file, given the path
 ///
 pub fn loadProgram(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
-    std.debug.print("vai {s}", .{path});
     const file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
@@ -261,6 +260,8 @@ test "eval 'hello world' program should output correctly" {
     try interpreter.eval(givenProgram, io.getStdIn().reader(), output.writer(), null);
 
     const actualString = try output.toOwnedSlice();
+    defer testing.allocator.free(actualString);
+
     try testing.expectEqualStrings("Hello, World!", actualString);
 }
 
@@ -284,19 +285,23 @@ fn mkTestFile(tempDir: testing.TmpDir, name: []const u8, content: []const u8) !s
 
 test "loadProgram on a valid file should read program content" {
     var tmp_dir = testing.tmpDir(.{});
-    defer tmp_dir.cleanup();
+    //defer tmp_dir.cleanup();
 
     const expectedFileName = "countdown.bf";
 
     const content = "++++[>+++++<-]>[<+++++>-]+<+[>[>+>+<<-]++>>[<<+>>-]>>>[-]++>[-]+>>>+[[-]++++++>>>]<<<[[<++++++++<++>>-]+<.<[>----<-]<]<<[>>>>>[>>>[-]+++++++++<[>-<-]+++++++++>[-[<->-]+[<<<]]<[>+<-]>]<<-]<<-]";
-    var programFile = try mkTestFile(tmp_dir, expectedFileName, content);
+
+    const programFile = try mkTestFile(tmp_dir, expectedFileName, content);
     defer programFile.close();
 
-    var pathToProgram = try tmp_dir.dir.realpathAlloc(testing.allocator, ".");
-    pathToProgram = try std.fmt.allocPrint(testing.allocator, "{s}/{s}", .{ pathToProgram, expectedFileName });
+    const pathToDir = try tmp_dir.dir.realpathAlloc(testing.allocator, ".");
+    defer testing.allocator.free(pathToDir);
+
+    const pathToProgram = try std.fmt.allocPrint(testing.allocator, "{s}/{s}", .{ pathToDir, expectedFileName });
     defer testing.allocator.free(pathToProgram);
 
     const loaded = try loadProgram(testing.allocator, pathToProgram);
+    defer testing.allocator.free(loaded);
 
-    try testing.expectEqualStrings(content ++ ".", loaded);
+    try testing.expectEqualStrings(content, loaded);
 }

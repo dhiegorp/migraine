@@ -7,7 +7,7 @@ I`ve been learning Zig for about two months and I needed a fun project to materi
 
 All part of my learning process: sometimes I need to build and run something, revisit it after a while to refactor it or even completely rewrite it with new ideas. 
 
-So feel free to try it, love it or hate it but definetely don`t take it too seriously. After all, its just another brainfuck interpreter.
+So feel free to try it, love it or hate it but definetely don`t take it too seriously. After all, its just another Brainfuck interpreter.
 
 ## Details
 
