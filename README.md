@@ -14,3 +14,8 @@ So feel free to try it, love it or hate it but definetely don`t take it too seri
 ## Build
 
 ## Usage
+
+## Examples (Credits)
+Some of the .bf files contained at 'examples' diretory are not made by me. This section is to give credits to whom are due.
++ './examples/mandelbrot.bf' : https://github.com/erikdubbelboer/brainfuck-jit
++ './examples/hello_world.bf': https://pt.wikipedia.org/wiki/Brainfuck
