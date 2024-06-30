@@ -1,4 +1,7 @@
 zig-*
 *.o
+*.obj
+*.pdb
+*.exe
 .vscode
 .zig-*

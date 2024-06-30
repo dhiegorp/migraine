@@ -75,10 +75,16 @@ fn mapJumpOperations(allocator: std.mem.Allocator, map: *std.AutoHashMap(usize, 
 
 pub const DEFAULT_MEMORY_CAPACITY: usize = 30000;
 
+///
+/// Interpreter controller structure.
+///
 pub const Interpreter = struct {
     memory: ?*mem.StaticSizeMemory,
     allocator: ?Allocator,
 
+    ///
+    /// Tries to instantiate an Interpreter with the given memory capacity.
+    ///
     pub fn initWithCapacity(allocator: Allocator, memoryCapacity: usize) !*Interpreter {
         const static_mem = try mem.StaticSizeMemory.init(allocator, memoryCapacity);
         const ptr = try allocator.create(@This());
@@ -87,6 +93,9 @@ pub const Interpreter = struct {
         return ptr;
     }
 
+    ///
+    /// Tries to instantiate an Interpreter with default memory capacity -- 30KB as in the original Brainfuck implementation.
+    ///
     pub fn init(allocator: Allocator) !*Interpreter {
         return initWithCapacity(allocator, DEFAULT_MEMORY_CAPACITY);
     }
@@ -238,7 +247,7 @@ test "unbalanced brackets: inverted jump opcodes must result in error" {
     try testing.expectEqual(1, diag.failed_opcode);
 }
 
-test "report errors: settng values must work" {
+test "report errors: setting values must work" {
     var diag = InterpreterDiagnostics{ .detailed_message = undefined, .failed_opcode = 0 };
     const expectedMessage = "an diag message";
     const failedIndex = 82;

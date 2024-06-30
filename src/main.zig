@@ -6,7 +6,10 @@ pub fn main() !void {
     const allocator = arena.allocator();
     defer arena.deinit();
 
-    var args = std.process.args();
+    //when using windows
+
+    var args = try std.process.argsWithAllocator(allocator);
+
     _ = args.skip();
 
     var path_arg: []const u8 = undefined;
