@@ -1,10 +1,11 @@
 const std = @import("std");
 const migraine = @import("migraine.zig");
-const err = std.io.getStdErr().writer();
-const out = std.io.getStdOut().writer();
-const in = std.io.getStdIn().reader();
 
 pub fn main() !void {
+    const err = std.io.getStdErr().writer();
+    const out = std.io.getStdOut().writer();
+    const in = std.io.getStdIn().reader();
+
     try out.print("Migraine 0.0.1a\n", .{});
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     const allocator = arena.allocator();
