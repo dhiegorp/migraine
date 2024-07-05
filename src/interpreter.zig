@@ -126,8 +126,22 @@ pub const Interpreter = struct {
                 while (pc < program.len) {
                     const opcode = program[pc];
                     switch (opcode) {
-                        '<' => try memory.shiftLeft(),
-                        '>' => try memory.shiftRight(),
+                        '<' => memory.shiftLeft() catch |err| {
+                            switch (err) {
+                                mem.MemoryPanic.RangeUnderflow => report("A shift left instruction caused an underflow at position", opcode, diagnostics),
+                                mem.MemoryPanic.ShiftOperationError => report("An undefined behaviour occurred while performing a shift left operation at position ", opcode, diagnostics),
+                                else => return err,
+                            }
+                            return err;
+                        },
+                        '>' => memory.shiftRight() catch |err| {
+                            switch (err) {
+                                mem.MemoryPanic.RangeUnderflow => report("A shift left instruction caused an underflow at position", opcode, diagnostics),
+                                mem.MemoryPanic.ShiftOperationError => report("An undefined behaviour occurred while performing a shift left operation at position ", opcode, diagnostics),
+                                else => return err,
+                            }
+                            return err;
+                        },
                         '+' => try memory.increment(),
                         '-' => try memory.decrement(),
                         ']' => {
