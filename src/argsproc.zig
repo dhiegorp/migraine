@@ -59,7 +59,6 @@ fn processCmdArguments(argsMap: std.StringHashMap(?[]const u8), options: *Interp
     }
 
     inline for (std.meta.fields(@TypeOf(options.*))) |field| {
-        std.debug.print("name: {s}, type: {any}\n", .{ field.name, field.type });
         if (argsMap.contains(field.name)) {
             const entry = argsMap.fetchRemove(field.name);
             if (field.type == bool) {
@@ -103,6 +102,10 @@ fn processCmdArguments(argsMap: std.StringHashMap(?[]const u8), options: *Interp
     }
 }
 
+test "preProcessArguments should return errors for invalid parse situations" {
+    @panic("implement!");
+}
+
 test "preProcessArguments pre process options supported successfuly" {
     const expectedKeys = [_][]const u8{ "flag1", "key", "flag2", "flag3", "flag4" };
     const expectedValues = [_]?[]const u8{ null, "value", null, "false", "true" };
@@ -122,6 +125,15 @@ test "preProcessArguments pre process options supported successfuly" {
     for (expectedKeys, 0..) |k, idx| {
         try std.testing.expect(map.contains(k));
 
-        try std.testing.expectEqual(expectedValues[idx], map.get(k).?);
+        const mappedValue = map.get(k);
+        try std.testing.expect(mappedValue != null);
+
+        if (mappedValue) |val| {
+            if (val) |v| {
+                try std.testing.expectEqualStrings(v, expectedValues[idx].?);
+            } else {
+                try std.testing.expect(expectedValues[idx] == null and val == null);
+            }
+        }
     }
 }
