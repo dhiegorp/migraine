@@ -147,6 +147,7 @@ pub const Interpreter = struct {
                         ']' => {
                             if (try memory.read()) |cell_value| {
                                 if (cell_value > 0) {
+                                    //pass the current instruction position to get the begining of the loop
                                     if (mapping.get(pc)) |matching_pos| {
                                         pc = matching_pos;
                                         continue;
