@@ -136,4 +136,7 @@ test "preProcessArguments pre process options supported successfuly" {
             }
         }
     }
+
+    //ensure that no error message written to buffer
+    try std.testing.expect(errBuff.items.len == 0);
 }
