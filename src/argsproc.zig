@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const InterpreterOptions = struct { help: bool = false, file: ?[]const u8 = null, eval: ?[]const u8 = null, verbose: bool = false, size: ?usize = null, dyna: bool = false, input: ?[]const u8 = null, inputDec: ?[]const u8 = null, alwaysFlush: bool = true, buffered: bool = false };
+const InterpreterOptions = struct { help: bool = false, file: ?[]const u8 = null, eval: ?[]const u8 = null, verbose: bool = false, size: ?usize = null, dyna: bool = false, input: ?[]const u8 = null, inputDec: ?[]const u8 = null, alwaysFlush: bool = true, buffered: bool = false, about: bool = false };
 
 const HELP_OPTION = "help";
 const ABOUT_OPTION = "about";
@@ -50,7 +50,108 @@ fn preProcessArguments(allocator: Allocator, stdErr: anytype, args: [][]const u8
     return argsMap;
 }
 
-fn processCmdArguments(argsMap: std.StringHashMap(?[]const u8), options: *InterpreterOptions, stdErr: anytype) !void {
+test "processCmdArguments - when argsMap has help and other options, help has precedence" {
+    var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
+    try argsMap.putNoClobber(HELP_OPTION, null);
+    try argsMap.putNoClobber(ABOUT_OPTION, null);
+    try argsMap.putNoClobber("file", "./examples/ola_mundo.bf");
+
+    defer {
+        var keys = argsMap.keyIterator();
+        while (keys.next()) |k| {
+            _ = argsMap.fetchRemove(k.*);
+        }
+        argsMap.deinit();
+    }
+
+    var errBuff = std.ArrayList(u8).init(std.testing.allocator);
+    defer errBuff.deinit();
+
+    const mockStdErr = errBuff.writer();
+
+    const expected = InterpreterOptions{ .help = true };
+    var actual = InterpreterOptions{};
+
+    try processCmdArguments(&argsMap, &actual, mockStdErr);
+
+    try std.testing.expectEqualDeep(expected, actual);
+
+    try std.testing.expect(errBuff.items.len == 0);
+}
+
+test "processCmdArguments - when argsMap has help option then should set options.help to true" {
+    var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
+    try argsMap.putNoClobber(HELP_OPTION, null);
+
+    defer {
+        _ = argsMap.fetchRemove(HELP_OPTION);
+        argsMap.deinit();
+    }
+
+    var errBuff = std.ArrayList(u8).init(std.testing.allocator);
+    defer errBuff.deinit();
+
+    const mockStdErr = errBuff.writer();
+
+    const expected = InterpreterOptions{ .help = true };
+    var actual = InterpreterOptions{};
+
+    try processCmdArguments(&argsMap, &actual, mockStdErr);
+
+    try std.testing.expectEqualDeep(expected, actual);
+
+    try std.testing.expect(errBuff.items.len == 0);
+}
+
+test "processCmdArguments - when argsMap has about option then should set options.about to true" {
+    var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
+    try argsMap.putNoClobber(ABOUT_OPTION, null);
+
+    defer {
+        _ = argsMap.fetchRemove(ABOUT_OPTION);
+        argsMap.deinit();
+    }
+
+    var errBuff = std.ArrayList(u8).init(std.testing.allocator);
+    defer errBuff.deinit();
+
+    const mockStdErr = errBuff.writer();
+
+    const expected = InterpreterOptions{ .about = true };
+    var actual = InterpreterOptions{};
+
+    try processCmdArguments(&argsMap, &actual, mockStdErr);
+
+    try std.testing.expectEqualDeep(expected, actual);
+
+    try std.testing.expect(errBuff.items.len == 0);
+}
+
+test "processCmdArguments - when argsMap is empty then should set options.help to true" {
+    var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
+    defer argsMap.deinit();
+
+    var errBuff = std.ArrayList(u8).init(std.testing.allocator);
+    defer errBuff.deinit();
+
+    const mockStdErr = errBuff.writer();
+
+    const expected = InterpreterOptions{ .help = true };
+    var actual = InterpreterOptions{};
+
+    try processCmdArguments(&argsMap, &actual, mockStdErr);
+
+    try std.testing.expectEqualDeep(expected, actual);
+
+    try std.testing.expect(errBuff.items.len == 0);
+}
+
+fn processCmdArguments(argsMap: *std.StringHashMap(?[]const u8), options: *InterpreterOptions, stdErr: anytype) !void {
+    if (argsMap.count() == 0) {
+        //if no args, show help
+        options.help = true;
+        return;
+    }
     if (argsMap.fetchRemove(HELP_OPTION)) |_| {
         //if help flag is detected, stops right away
         options.help = true;
