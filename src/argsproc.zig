@@ -24,12 +24,16 @@ fn preProcessArguments(allocator: Allocator, stdErr: anytype, args: [][]const u8
     var argsMap = std.StringHashMap(?[]const u8).init(allocator);
 
     for (args) |arg| {
+        if (std.mem.eql(u8, arg, "")) {
+            continue;
+        }
+
         const equalIdx = std.mem.indexOf(u8, arg, symb_eq);
         const doubleDashIdx = std.mem.indexOf(u8, arg, symb_dd);
 
         if (doubleDashIdx) |dId| {
             if (equalIdx) |eId| {
-                if (arg.len <= eId) {
+                if (arg.len - 1 <= eId) {
                     try stdErr.print("\nError: '{s}' is not a valid command line option!", .{arg});
                     return error.InvalidArgumentFound;
                 }
@@ -85,6 +89,7 @@ fn processCmdArguments(argsMap: std.StringHashMap(?[]const u8), options: *Interp
 
     //check if there are any arguments left, which means its an error and generate some error messages!
     if (argsMap.count() > 0) {
+        std.log.err(">0", .{});
         //there are argument errors
         //removeAll printing errors
         try stdErr.print("Error: option(s) found without resolution:\n\t", .{});
@@ -102,11 +107,54 @@ fn processCmdArguments(argsMap: std.StringHashMap(?[]const u8), options: *Interp
     }
 }
 
-test "preProcessArguments should return errors for invalid parse situations" {
-    @panic("implement!");
+test "preProcessArguments should return errors for invalid options args" {
+    var errBuff = std.ArrayList(u8).init(std.testing.allocator);
+    defer errBuff.deinit();
+
+    const mockStdErr = errBuff.writer();
+
+    var args = [_][]const u8{"-field"};
+    try std.testing.expectError(error.InvalidArgumentFound, preProcessArguments(std.testing.allocator, mockStdErr, &args));
+    try std.testing.expect(errBuff.items.len > 0);
+    errBuff.clearAndFree();
+
+    args = [_][]const u8{"-field=test"};
+    try std.testing.expectError(error.InvalidArgumentFound, preProcessArguments(std.testing.allocator, mockStdErr, &args));
+    try std.testing.expect(errBuff.items.len > 0);
+    errBuff.clearAndFree();
+
+    args = [_][]const u8{"field"};
+    try std.testing.expectError(error.InvalidArgumentFound, preProcessArguments(std.testing.allocator, mockStdErr, &args));
+    try std.testing.expect(errBuff.items.len > 0);
+    errBuff.clearAndFree();
+
+    args = [_][]const u8{"field=mockery"};
+    try std.testing.expectError(error.InvalidArgumentFound, preProcessArguments(std.testing.allocator, mockStdErr, &args));
+    try std.testing.expect(errBuff.items.len > 0);
+    errBuff.clearAndFree();
+
+    args = [_][]const u8{"--field="};
+    try std.testing.expectError(error.InvalidArgumentFound, preProcessArguments(std.testing.allocator, mockStdErr, &args));
+    try std.testing.expect(errBuff.items.len > 0);
+    errBuff.clearAndFree();
 }
 
-test "preProcessArguments pre process options supported successfuly" {
+test "preProcessArguments - when no args passed then should result in empty map" {
+    var args = [_][]const u8{""};
+
+    var errBuff = std.ArrayList(u8).init(std.testing.allocator);
+    defer errBuff.deinit();
+    const mockStdErr = errBuff.writer();
+
+    var map = try preProcessArguments(std.testing.allocator, mockStdErr, &args);
+    defer map.deinit();
+
+    try std.testing.expectEqual(0, map.count());
+
+    try std.testing.expect(errBuff.items.len == 0);
+}
+
+test "preProcessArguments - when supported options passed then should map each one successfully" {
     const expectedKeys = [_][]const u8{ "flag1", "key", "flag2", "flag3", "flag4" };
     const expectedValues = [_]?[]const u8{ null, "value", null, "false", "true" };
 
@@ -114,7 +162,6 @@ test "preProcessArguments pre process options supported successfuly" {
 
     var errBuff = std.ArrayList(u8).init(std.testing.allocator);
     defer errBuff.deinit();
-
     const mockStdErr = errBuff.writer();
 
     var map = try preProcessArguments(std.testing.allocator, mockStdErr, &args);
