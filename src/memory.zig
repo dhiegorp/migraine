@@ -14,3 +14,7 @@ pub const MemoryPanic = error{
     ShiftOperationError,
     HeadPointerError,
 };
+
+test {
+    _ = static_memory;
+}

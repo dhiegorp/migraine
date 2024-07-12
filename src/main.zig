@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const migraine = @import("migraine.zig");
+const argsproc = @import("argsproc.zig");
 
 ///
 /// migraine --help
@@ -56,4 +57,9 @@ fn help(writer: anytype) !void {
 fn about(writer: anytype) !void {
     try header(writer);
     try writer.print("{s}\n", .{ABOUT});
+}
+
+test {
+    _ = argsproc;
+    _ = migraine;
 }
