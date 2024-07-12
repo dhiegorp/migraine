@@ -52,8 +52,13 @@ fn preProcessArguments(allocator: Allocator, stdErr: anytype, args: [][]const u8
 }
 
 ///
-/// Given a map with arguments and values, fill the struct InterpreterOptions.
-/// The command line arguments must match the struct
+/// Given a map with arguments and values, fill InterpreterOptions.
+/// The command line arguments must match the struct`s attributes name and The type of each attribute determines how it will be parsed, although
+/// an error is not returned for a invalid value; e.g. --help=1234 , a bool attribute associated with a option mapped with an invalid value would
+/// result in false instead of an error.
+/// Another case of error is when the argsMap still has entries after the InterpreterOptions attributes` loop -- which means that invalid options
+/// were passed.
+///
 fn processCmdArguments(argsMap: *std.StringHashMap(?[]const u8), options: *InterpreterOptions, stdErr: anytype) !void {
     if (argsMap.count() == 0) {
         //if no args, show help
@@ -98,8 +103,7 @@ fn processCmdArguments(argsMap: *std.StringHashMap(?[]const u8), options: *Inter
 
     //check if there are any arguments left, which means its an error and generate some error messages!
     if (argsMap.count() > 0) {
-        //there are argument errors
-        //removeAll printing errors
+        //still there are arguments not processed, so removeAll entries printing errors
         try stdErr.print("Error: option(s) found without resolution:\n\t", .{});
         var keys = argsMap.keyIterator();
         while (keys.next()) |key| {
