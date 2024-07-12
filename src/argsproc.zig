@@ -6,17 +6,6 @@ const InterpreterOptions = struct { help: bool = false, file: ?[]const u8 = null
 const HELP_OPTION = "help";
 const ABOUT_OPTION = "about";
 
-fn compareTermFlag(literal: []const u8, term: []const u8) bool {
-    return std.mem.indexOf(u8, term, literal) > 0 orelse false;
-}
-
-fn recoverArgValue(term: []const u8) ?[]const u8 {
-    if (std.mem.indexOf(u8, term, "=")) |pos| {
-        return term[pos..];
-    }
-    return null;
-}
-
 fn preProcessArguments(allocator: Allocator, stdErr: anytype, args: [][]const u8) !std.StringHashMap(?[]const u8) {
     const symb_eq = "=";
     const symb_dd = "--";
