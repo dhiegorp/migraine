@@ -50,11 +50,63 @@ fn preProcessArguments(allocator: Allocator, stdErr: anytype, args: [][]const u8
     return argsMap;
 }
 
-test "processCmdArguments - when argsMap has help and other options, help has precedence" {
+test "processCmdArguments - when setting option value string, then text is stored correctly at struct" {
+    const expectedValue = "./example/os.bf";
+
     var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
-    try argsMap.putNoClobber(HELP_OPTION, null);
-    try argsMap.putNoClobber(ABOUT_OPTION, null);
-    try argsMap.putNoClobber("file", "./examples/ola_mundo.bf");
+    defer {
+        var keys = argsMap.keyIterator();
+        while (keys.next()) |k| {
+            _ = argsMap.fetchRemove(k.*);
+        }
+        argsMap.deinit();
+    }
+    try argsMap.putNoClobber("file", expectedValue);
+
+    var errBuff = std.ArrayList(u8).init(std.testing.allocator);
+    defer errBuff.deinit();
+
+    const mockStdErr = errBuff.writer();
+
+    const expected = InterpreterOptions{ .file = expectedValue };
+    var actual = InterpreterOptions{};
+
+    try processCmdArguments(&argsMap, &actual, mockStdErr);
+
+    try std.testing.expectEqualDeep(expected, actual);
+
+    try std.testing.expect(errBuff.items.len == 0);
+}
+
+test "processCmdArguments - when setting option flag equals to true, then flag is enabled" {
+    var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
+    defer {
+        var keys = argsMap.keyIterator();
+        while (keys.next()) |k| {
+            _ = argsMap.fetchRemove(k.*);
+        }
+        argsMap.deinit();
+    }
+
+    try argsMap.putNoClobber("verbose", "true");
+
+    var errBuff = std.ArrayList(u8).init(std.testing.allocator);
+    defer errBuff.deinit();
+
+    const mockStdErr = errBuff.writer();
+
+    const expected = InterpreterOptions{ .verbose = true };
+    var actual = InterpreterOptions{};
+
+    try processCmdArguments(&argsMap, &actual, mockStdErr);
+
+    try std.testing.expectEqualDeep(expected, actual);
+
+    try std.testing.expect(errBuff.items.len == 0);
+}
+
+test "processCmdArguments - when setting option flag equals to false, then flag is disabled" {
+    var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
 
     defer {
         var keys = argsMap.keyIterator();
@@ -63,6 +115,38 @@ test "processCmdArguments - when argsMap has help and other options, help has pr
         }
         argsMap.deinit();
     }
+
+    try argsMap.putNoClobber("alwaysFlush", "false");
+
+    var errBuff = std.ArrayList(u8).init(std.testing.allocator);
+    defer errBuff.deinit();
+
+    const mockStdErr = errBuff.writer();
+
+    const expected = InterpreterOptions{ .alwaysFlush = false };
+    var actual = InterpreterOptions{};
+
+    try processCmdArguments(&argsMap, &actual, mockStdErr);
+
+    try std.testing.expectEqualDeep(expected, actual);
+
+    try std.testing.expect(errBuff.items.len == 0);
+}
+
+test "processCmdArguments - when argsMap has help and other options, help has precedence" {
+    var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
+
+    defer {
+        var keys = argsMap.keyIterator();
+        while (keys.next()) |k| {
+            _ = argsMap.fetchRemove(k.*);
+        }
+        argsMap.deinit();
+    }
+
+    try argsMap.putNoClobber(HELP_OPTION, null);
+    try argsMap.putNoClobber(ABOUT_OPTION, null);
+    try argsMap.putNoClobber("file", "./examples/ola_mundo.bf");
 
     var errBuff = std.ArrayList(u8).init(std.testing.allocator);
     defer errBuff.deinit();
@@ -81,12 +165,13 @@ test "processCmdArguments - when argsMap has help and other options, help has pr
 
 test "processCmdArguments - when argsMap has help option then should set options.help to true" {
     var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
-    try argsMap.putNoClobber(HELP_OPTION, null);
 
     defer {
         _ = argsMap.fetchRemove(HELP_OPTION);
         argsMap.deinit();
     }
+
+    try argsMap.putNoClobber(HELP_OPTION, null);
 
     var errBuff = std.ArrayList(u8).init(std.testing.allocator);
     defer errBuff.deinit();
@@ -105,12 +190,13 @@ test "processCmdArguments - when argsMap has help option then should set options
 
 test "processCmdArguments - when argsMap has about option then should set options.about to true" {
     var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
-    try argsMap.putNoClobber(ABOUT_OPTION, null);
 
     defer {
         _ = argsMap.fetchRemove(ABOUT_OPTION);
         argsMap.deinit();
     }
+
+    try argsMap.putNoClobber(ABOUT_OPTION, null);
 
     var errBuff = std.ArrayList(u8).init(std.testing.allocator);
     defer errBuff.deinit();
@@ -125,6 +211,27 @@ test "processCmdArguments - when argsMap has about option then should set option
     try std.testing.expectEqualDeep(expected, actual);
 
     try std.testing.expect(errBuff.items.len == 0);
+}
+
+test "processCmdArguments - when argsMap has unexpected arg then should return an error" {
+    var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
+    defer {
+        _ = argsMap.fetchRemove("File");
+        argsMap.deinit();
+    }
+
+    try argsMap.putNoClobber("File", "./os.bf");
+
+    var errBuff = std.ArrayList(u8).init(std.testing.allocator);
+    defer errBuff.deinit();
+
+    const mockStdErr = errBuff.writer();
+
+    var actual = InterpreterOptions{};
+
+    try std.testing.expectError(error.InvalidArgumentFound, processCmdArguments(&argsMap, &actual, mockStdErr));
+    try std.testing.expect(actual.file == null);
+    try std.testing.expect(errBuff.items.len > 0);
 }
 
 test "processCmdArguments - when argsMap is empty then should set options.help to true" {
@@ -190,7 +297,6 @@ fn processCmdArguments(argsMap: *std.StringHashMap(?[]const u8), options: *Inter
 
     //check if there are any arguments left, which means its an error and generate some error messages!
     if (argsMap.count() > 0) {
-        std.log.err(">0", .{});
         //there are argument errors
         //removeAll printing errors
         try stdErr.print("Error: option(s) found without resolution:\n\t", .{});
