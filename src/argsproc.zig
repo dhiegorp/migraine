@@ -1,11 +1,23 @@
+///
+/// Rudimentary command line arguments 'parser'
+///
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-
-const InterpreterOptions = struct { help: bool = false, file: ?[]const u8 = null, eval: ?[]const u8 = null, verbose: bool = false, size: ?usize = null, dyna: bool = false, input: ?[]const u8 = null, inputDec: ?[]const u8 = null, alwaysFlush: bool = true, buffered: bool = false, about: bool = false };
 
 const HELP_OPTION = "help";
 const ABOUT_OPTION = "about";
 
+///
+/// InterpreterOptions represent the set of available commands
+///
+const InterpreterOptions = struct { help: bool = false, file: ?[]const u8 = null, eval: ?[]const u8 = null, verbose: bool = false, size: ?usize = null, dyna: bool = false, input: ?[]const u8 = null, inputDec: ?[]const u8 = null, alwaysFlush: bool = true, buffered: bool = false, about: bool = false };
+
+///
+/// Given a set of command line arguments, validate it matching the following patterns:
+///  - options passed without values --<OPTION_VALUE> are stored as an entry in which K = <OPTION_NAME> and V = null; e.g, "--help"
+///  - options with values following the pattern --<OPTION_NAME>=<VALUE> are stored as an entry in which K = <OPTION_NAME> and V=<VALUE>; e.g. "--file=example.bf"
+///  - options followed by an equal sign and no value result in error; e.g. "--file="
+///
 fn preProcessArguments(allocator: Allocator, stdErr: anytype, args: [][]const u8) !std.StringHashMap(?[]const u8) {
     const symb_eq = "=";
     const symb_dd = "--";
@@ -39,6 +51,9 @@ fn preProcessArguments(allocator: Allocator, stdErr: anytype, args: [][]const u8
     return argsMap;
 }
 
+///
+/// Given a map with arguments and values, fill the struct InterpreterOptions.
+/// The command line arguments must match the struct
 fn processCmdArguments(argsMap: *std.StringHashMap(?[]const u8), options: *InterpreterOptions, stdErr: anytype) !void {
     if (argsMap.count() == 0) {
         //if no args, show help
