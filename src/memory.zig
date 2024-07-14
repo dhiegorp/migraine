@@ -1,3 +1,7 @@
+///
+/// memory module.
+/// The idea is that it aggregates static and dynamic sized memory
+///
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const testing = std.testing;

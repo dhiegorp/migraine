@@ -6,114 +6,61 @@ const MemoryPanic = memory_def.MemoryPanic;
 const testing = std.testing;
 
 pub const StaticSizeMemory = struct {
-    head: ?usize,
-    allocator: ?Allocator,
-    tape: ?[]u8,
+    head: usize,
+    allocator: Allocator,
+    tape: []u8,
 
     pub fn init(allocator: Allocator, numberOfCells: usize) !*StaticSizeMemory {
         const ptr = try allocator.create(@This());
         ptr.allocator = allocator;
         ptr.head = 0;
         ptr.tape = try allocator.alloc(u8, numberOfCells);
-        @memset(ptr.tape.?, 0);
+        @memset(ptr.tape, 0);
         return ptr;
     }
 
     pub fn deinit(self: *StaticSizeMemory) void {
-        if (self.allocator) |alloc| {
-            if (self.tape) |tape| {
-                alloc.free(tape);
-            }
-            alloc.destroy(self);
-        }
+        self.allocator.free(self.tape);
+        self.allocator.destroy(self);
     }
 
-    pub fn currentAddress(self: *StaticSizeMemory) ?usize {
+    pub fn currentAddress(self: *StaticSizeMemory) usize {
         return self.head;
     }
 
     pub fn headTo(self: *StaticSizeMemory, address: usize) !void {
-        if (self.tape) |tape| {
-            if (tape.len > 0) {
-                if (address > tape.len - 1) {
-                    return MemoryPanic.RangeOverflow;
-                }
-                self.head = address;
-                return;
-            }
-        }
-        return MemoryPanic.HeadPointerError;
+        if (self.tape.len == 0 or address > self.tape.len - 1) return MemoryPanic.HeadPointerError;
+        self.head = address;
     }
 
     pub fn increment(self: *StaticSizeMemory) !void {
-        if (self.tape) |tape| {
-            if (tape.len > 0) {
-                if (self.head) |head| {
-                    tape[head] +%= 1;
-                    return;
-                }
-            }
-        }
-        return MemoryPanic.WriteOperationError;
+        if (self.tape.len == 0 or self.head > self.tape.len - 1) return MemoryPanic.WriteOperationError;
+        self.tape[self.head] +%= 1;
     }
 
     pub fn decrement(self: *StaticSizeMemory) !void {
-        if (self.tape) |tape| {
-            if (tape.len > 0) {
-                if (self.head) |head| {
-                    tape[head] -%= 1;
-                    return;
-                }
-            }
-        }
-        return MemoryPanic.WriteOperationError;
+        if (self.tape.len == 0 or self.head > self.tape.len - 1) return MemoryPanic.WriteOperationError;
+        self.tape[self.head] -%= 1;
     }
 
     pub fn shiftRight(self: *StaticSizeMemory) !void {
-        if (self.tape) |tape| {
-            if (self.head) |head| {
-                if (head == tape.len - 1) {
-                    return MemoryPanic.RangeOverflow;
-                }
-                self.head = head + 1;
-                return;
-            }
-        }
-        return MemoryPanic.ShiftOperationError;
+        if (self.tape.len == 0 or self.head + 1 > self.tape.len - 1) return MemoryPanic.RangeOverflow;
+        self.head += 1;
     }
 
     pub fn shiftLeft(self: *StaticSizeMemory) !void {
-        if (self.head) |head| {
-            if (head == 0) {
-                return MemoryPanic.RangeUnderflow;
-            }
-            self.head = head - 1;
-            return;
-        }
-        return MemoryPanic.ShiftOperationError;
+        if (self.head == 0) return MemoryPanic.RangeUnderflow;
+        self.head -= 1;
     }
 
     pub fn write(self: *StaticSizeMemory, data: u8) !void {
-        if (self.tape) |tape| {
-            if (tape.len > 0) {
-                if (self.head) |head| {
-                    tape[head] = data;
-                    return;
-                }
-            }
-        }
-        return MemoryPanic.WriteOperationError;
+        if (self.tape.len == 0 or self.head > self.tape.len - 1) return MemoryPanic.WriteOperationError;
+        self.tape[self.head] = data;
     }
 
-    pub fn read(self: *StaticSizeMemory) !?u8 {
-        if (self.tape) |tape| {
-            if (tape.len > 0) {
-                if (self.head) |head| {
-                    return tape[head];
-                }
-            }
-        }
-        return MemoryPanic.ReadOperationError;
+    pub fn read(self: *StaticSizeMemory) !u8 {
+        if (self.tape.len == 0 or self.head > self.tape.len - 1) return MemoryPanic.ReadOperationError;
+        return self.tape[self.head];
     }
 };
 
@@ -126,16 +73,16 @@ test "StaticSizeMemory - currentAddress should return the exact value from the h
     defer mem.deinit();
 
     try mem.headTo(9);
-    try testing.expectEqual(9, mem.currentAddress().?);
+    try testing.expectEqual(9, mem.currentAddress());
 
     try mem.headTo(0);
-    try testing.expectEqual(0, mem.currentAddress().?);
+    try testing.expectEqual(0, mem.currentAddress());
 
     try mem.headTo(5);
-    try testing.expectEqual(5, mem.currentAddress().?);
+    try testing.expectEqual(5, mem.currentAddress());
 
     try mem.headTo(3);
-    try testing.expectEqual(3, mem.currentAddress().?);
+    try testing.expectEqual(3, mem.currentAddress());
 }
 
 test "StaticSizeMemory - decrement on an invalid memory should return an error" {
@@ -242,7 +189,7 @@ test "StaticSizeMemory - memory with zero cells should work but is unusable" {
     var mem = try StaticSizeMemory.init(testing.allocator, 0);
     defer mem.deinit();
 
-    try testing.expect(mem.tape.?.len == 0);
+    try testing.expect(mem.tape.len == 0);
 }
 
 test "StaticSizeMemory - call headTo without memory cells should return error" {
@@ -256,7 +203,7 @@ test "StaticSizeMemory - call headTo without memory cells should return error" {
 test "StaticSizeMemory - set head to an address outside the valid memory range should return an error" {
     const mem = try StaticSizeMemory.init(testing.allocator, 1);
     defer mem.deinit();
-    try testing.expectError(MemoryPanic.RangeOverflow, mem.headTo(1));
+    try testing.expectError(MemoryPanic.HeadPointerError, mem.headTo(1));
 }
 
 test "StaticSizeMemory - set head to an 'address' should update head correctly" {
@@ -264,13 +211,13 @@ test "StaticSizeMemory - set head to an 'address' should update head correctly" 
     defer mem.deinit();
 
     try mem.headTo(1);
-    try testing.expect(mem.currentAddress().? == 1);
+    try testing.expect(mem.currentAddress() == 1);
     try mem.headTo(9);
-    try testing.expect(mem.currentAddress().? == 9);
+    try testing.expect(mem.currentAddress() == 9);
     try mem.headTo(5);
-    try testing.expect(mem.currentAddress().? == 5);
+    try testing.expect(mem.currentAddress() == 5);
     try mem.headTo(0);
-    try testing.expect(mem.currentAddress().? == 0);
+    try testing.expect(mem.currentAddress() == 0);
 }
 
 test "StaticSizeMemory - shift left should work while head is pointing to an address greater than zero" {
@@ -284,7 +231,7 @@ test "StaticSizeMemory - shift left should work while head is pointing to an add
     try mem.shiftLeft(); //should've set head to 1
     try mem.shiftLeft(); //should've set head to 0
 
-    try testing.expectEqual(0, mem.currentAddress().?);
+    try testing.expectEqual(0, mem.currentAddress());
 
     try testing.expectError(MemoryPanic.RangeUnderflow, mem.shiftLeft());
 }
@@ -309,7 +256,6 @@ test "StaticSizeMemory - shift right should work while head is not pointing to t
     try mem.shiftRight(); //should've set head to 8
     try mem.shiftRight(); //should've set head to 9
 
-    try testing.expectEqual(9, mem.currentAddress().?);
-
+    try testing.expectEqual(9, mem.currentAddress());
     try testing.expectError(MemoryPanic.RangeOverflow, mem.shiftRight());
 }
