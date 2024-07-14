@@ -10,7 +10,7 @@ const ABOUT_OPTION = "about";
 ///
 /// InterpreterOptions represent the set of available commands
 ///
-const InterpreterOptions = struct { help: bool = false, file: ?[]const u8 = null, eval: ?[]const u8 = null, verbose: bool = false, size: ?usize = null, dyna: bool = false, input: ?[]const u8 = null, inputDec: ?[]const u8 = null, alwaysFlush: bool = true, buffered: bool = false, about: bool = false };
+pub const InterpreterOptions = struct { help: bool = false, file: ?[]const u8 = null, eval: ?[]const u8 = null, verbose: bool = false, size: ?usize = null, dyna: bool = false, input: ?[]const u8 = null, inputDec: ?[]const u8 = null, alwaysFlush: bool = true, buffered: bool = false, about: bool = false };
 
 ///
 /// Given a set of command line arguments, validate it matching the following patterns:
@@ -18,7 +18,7 @@ const InterpreterOptions = struct { help: bool = false, file: ?[]const u8 = null
 ///  - options with values following the pattern --<OPTION_NAME>=<VALUE> are stored as an entry in which K = <OPTION_NAME> and V=<VALUE>; e.g. "--file=example.bf"
 ///  - options followed by an equal sign and no value result in error; e.g. "--file="
 ///
-fn preProcessArguments(allocator: Allocator, stdErr: anytype, args: [][]const u8) !std.StringHashMap(?[]const u8) {
+pub fn preProcessArguments(allocator: Allocator, stdErr: anytype, args: [][]const u8) !std.StringHashMap(?[]const u8) {
     const symb_eq = "=";
     const symb_dd = "--";
 
@@ -54,12 +54,12 @@ fn preProcessArguments(allocator: Allocator, stdErr: anytype, args: [][]const u8
 ///
 /// Given a map with arguments and values, fill InterpreterOptions.
 /// The command line arguments must match the struct`s attributes name and The type of each attribute determines how it will be parsed, although
-/// an error is not returned for a invalid value; e.g. --help=1234 , a bool attribute associated with a option mapped with an invalid value would
+/// an error is not returned for a invalid value; e.g. --help=1234 , a bool attribute associated with an option mapped with an invalid value would
 /// result in false instead of an error.
 /// Another case of error is when the argsMap still has entries after the InterpreterOptions attributes` loop -- which means that invalid options
 /// were passed.
 ///
-fn processCmdArguments(argsMap: *std.StringHashMap(?[]const u8), options: *InterpreterOptions, stdErr: anytype) !void {
+pub fn processCmdArguments(argsMap: *std.StringHashMap(?[]const u8), options: *InterpreterOptions, stdErr: anytype) !void {
     if (argsMap.count() == 0) {
         //if no args, show help
         options.help = true;
@@ -159,7 +159,11 @@ test "preProcessArguments - when no args passed then should result in empty map"
     const mockStdErr = errBuff.writer();
 
     var map = try preProcessArguments(std.testing.allocator, mockStdErr, &args);
-    defer map.deinit();
+    defer {
+        var keys = map.keyIterator();
+        while (keys.next()) |k| std.testing.allocator.free(k.*);
+        map.deinit();
+    }
 
     try std.testing.expectEqual(0, map.count());
 
@@ -206,11 +210,10 @@ test "processCmdArguments - when setting option value string, then text is store
     var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
     defer {
         var keys = argsMap.keyIterator();
-        while (keys.next()) |k| {
-            _ = argsMap.fetchRemove(k.*);
-        }
+        while (keys.next()) |k| std.testing.allocator.free(k.*);
         argsMap.deinit();
     }
+
     try argsMap.putNoClobber("file", expectedValue);
 
     var errBuff = std.ArrayList(u8).init(std.testing.allocator);
@@ -232,9 +235,7 @@ test "processCmdArguments - when setting option flag equals to true, then flag i
     var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
     defer {
         var keys = argsMap.keyIterator();
-        while (keys.next()) |k| {
-            _ = argsMap.fetchRemove(k.*);
-        }
+        while (keys.next()) |k| std.testing.allocator.free(k.*);
         argsMap.deinit();
     }
 
@@ -257,12 +258,9 @@ test "processCmdArguments - when setting option flag equals to true, then flag i
 
 test "processCmdArguments - when setting option flag equals to false, then flag is disabled" {
     var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
-
     defer {
         var keys = argsMap.keyIterator();
-        while (keys.next()) |k| {
-            _ = argsMap.fetchRemove(k.*);
-        }
+        while (keys.next()) |k| std.testing.allocator.free(k.*);
         argsMap.deinit();
     }
 
@@ -285,14 +283,7 @@ test "processCmdArguments - when setting option flag equals to false, then flag 
 
 test "processCmdArguments - when argsMap has help and other options, help has precedence" {
     var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
-
-    defer {
-        var keys = argsMap.keyIterator();
-        while (keys.next()) |k| {
-            _ = argsMap.fetchRemove(k.*);
-        }
-        argsMap.deinit();
-    }
+    defer argsMap.deinit();
 
     try argsMap.putNoClobber(HELP_OPTION, null);
     try argsMap.putNoClobber(ABOUT_OPTION, null);
@@ -315,9 +306,9 @@ test "processCmdArguments - when argsMap has help and other options, help has pr
 
 test "processCmdArguments - when argsMap has help option then should set options.help to true" {
     var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
-
     defer {
-        _ = argsMap.fetchRemove(HELP_OPTION);
+        var keys = argsMap.keyIterator();
+        while (keys.next()) |k| std.testing.allocator.free(k.*);
         argsMap.deinit();
     }
 
@@ -340,9 +331,9 @@ test "processCmdArguments - when argsMap has help option then should set options
 
 test "processCmdArguments - when argsMap has about option then should set options.about to true" {
     var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
-
     defer {
-        _ = argsMap.fetchRemove(ABOUT_OPTION);
+        var keys = argsMap.keyIterator();
+        while (keys.next()) |k| std.testing.allocator.free(k.*);
         argsMap.deinit();
     }
 
@@ -366,7 +357,8 @@ test "processCmdArguments - when argsMap has about option then should set option
 test "processCmdArguments - when argsMap has unexpected arg then should return an error" {
     var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
     defer {
-        _ = argsMap.fetchRemove("File");
+        var keys = argsMap.keyIterator();
+        while (keys.next()) |k| std.testing.allocator.free(k.*);
         argsMap.deinit();
     }
 

@@ -34,8 +34,11 @@ pub fn loadProgram(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
 
     const metadata = try file.stat();
 
-    const program = try file.readToEndAlloc(allocator, metadata.size);
-    return program;
+    switch (metadata.kind) {
+        .directory => return error.CannotLoadProgramFromDirectory,
+        .file => return try file.readToEndAlloc(allocator, metadata.size),
+        else => unreachable,
+    }
 }
 
 ///
