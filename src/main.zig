@@ -13,6 +13,5 @@ pub fn main() !void {
 }
 
 test {
-    _ = argsproc;
-    _ = migraine;
+    std.testing.refAllDecls(@This());
 }

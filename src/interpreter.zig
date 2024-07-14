@@ -57,7 +57,6 @@ fn mapJumpOperations(allocator: std.mem.Allocator, map: *std.AutoHashMap(usize, 
             },
             ']' => {
                 if (control.popOrNull()) |opening_idx| {
-                    //double link '[' -> ']' and '[' <- ']'
                     try map.putNoClobber(opening_idx, index);
                     try map.putNoClobber(index, opening_idx);
                 } else {
@@ -82,8 +81,8 @@ pub const DEFAULT_MEMORY_CAPACITY: usize = 30000;
 /// Interpreter controller structure.
 ///
 pub const Interpreter = struct {
-    memory: ?*mem.StaticSizeMemory,
-    allocator: ?Allocator,
+    memory: *mem.StaticSizeMemory,
+    allocator: Allocator,
 
     ///
     /// Tries to instantiate an Interpreter with the given memory capacity.
@@ -104,12 +103,8 @@ pub const Interpreter = struct {
     }
 
     pub fn deinit(self: *Interpreter) void {
-        if (self.allocator) |alloc| {
-            if (self.memory) |memory| {
-                memory.deinit();
-            }
-            alloc.destroy(self);
-        }
+        self.memory.deinit();
+        self.allocator.destroy(self);
     }
 
     ///
@@ -117,97 +112,85 @@ pub const Interpreter = struct {
     /// Ideally it should use a 'step' function to allow 'interactive debugging'.
     ///
     pub fn eval(self: *Interpreter, program: []const u8, input: anytype, output: anytype, diagnostics: ?*InterpreterDiagnostics) anyerror!void {
-        if (self.allocator) |alloc| {
-            var mapping = std.AutoHashMap(usize, usize).init(alloc);
-            defer mapping.deinit();
+        var mapping = std.AutoHashMap(usize, usize).init(self.allocator);
+        defer mapping.deinit();
 
-            try mapJumpOperations(alloc, &mapping, program, diagnostics);
+        try mapJumpOperations(self.allocator, &mapping, program, diagnostics);
 
-            var pc: usize = 0;
+        var pc: usize = 0;
 
-            if (self.memory) |memory| {
-                while (pc < program.len) {
-                    const opcode = program[pc];
-                    switch (opcode) {
-                        '<' => memory.shiftLeft() catch |err| {
-                            switch (err) {
-                                mem.MemoryPanic.RangeUnderflow => report("A shift left instruction caused an underflow at position", opcode, diagnostics),
-                                mem.MemoryPanic.ShiftOperationError => report("An undefined behaviour occurred while performing a shift left operation at position ", opcode, diagnostics),
-                                else => return err,
-                            }
-                            return err;
-                        },
-                        '>' => memory.shiftRight() catch |err| {
-                            switch (err) {
-                                mem.MemoryPanic.RangeUnderflow => report("A shift left instruction caused an underflow at position", opcode, diagnostics),
-                                mem.MemoryPanic.ShiftOperationError => report("An undefined behaviour occurred while performing a shift left operation at position ", opcode, diagnostics),
-                                else => return err,
-                            }
-                            return err;
-                        },
-                        '+' => try memory.increment(),
-                        '-' => try memory.decrement(),
-                        ']' => {
-                            if (try memory.read()) |cell_value| {
-                                if (cell_value > 0) {
-                                    //pass the current instruction position to get the begining of the loop
-                                    if (mapping.get(pc)) |matching_pos| {
-                                        pc = matching_pos;
-                                        continue;
-                                    } else {
-                                        report("Impossible to find a match for the closing bracket", pc, diagnostics);
-                                        return InterpreterPanic.UnmappedJumpOperation;
-                                    }
-                                }
-                            } else {
-                                report("Impossible to evaluate jump. A problem occurred while accessing the current memory cell.", pc, diagnostics);
-                                return InterpreterPanic.MemoryAccessError;
-                            }
-                        },
-                        '[' => {
-                            if (try memory.read()) |cell_value| {
-                                if (cell_value == 0) {
-                                    if (mapping.get(pc)) |matching_pos| {
-                                        pc = matching_pos;
-                                        continue;
-                                    } else {
-                                        report("Impossible to find a match for the opening bracket", pc, diagnostics);
-                                        return InterpreterPanic.UnmappedJumpOperation;
-                                    }
-                                }
-                            } else {
-                                report("Impossible to evaluate jump. A problem occurred while accessing the current memory cell.", pc, diagnostics);
-                                return InterpreterPanic.MemoryAccessError;
-                            }
-                        },
-                        '.' => {
-                            if (try memory.read()) |cell_value| {
-                                try output.writeByte(cell_value);
-                            } else {
-                                report("Impossible to output value. A problem occurred while accessing the current memory cell.", pc, diagnostics);
-                                return InterpreterPanic.MemoryAccessError;
-                            }
-                        },
-                        ',' => {
-                            const byte = input.readByte() catch 0;
-                            try memory.write(byte);
-                        },
-                        else => {
-                            //every other symbol MUST be ignored and should be interpreted as comments
-                        },
+        while (pc < program.len) {
+            const opcode = program[pc];
+            switch (opcode) {
+                '<' => self.memory.shiftLeft() catch |err| {
+                    switch (err) {
+                        mem.MemoryPanic.RangeUnderflow => report("A shift left instruction caused an underflow at position", opcode, diagnostics),
+                        mem.MemoryPanic.ShiftOperationError => report("An undefined behaviour occurred while performing a shift left operation at position ", opcode, diagnostics),
+                        else => {},
                     }
-                    pc += 1;
-                }
-            } else {
-                //TODO changing report to not rely on opcode references
-                report("Impossible to increment. Memory was not initialized.", 0, diagnostics);
-                return InterpreterPanic.MemoryNotInitialized;
+                    return err;
+                },
+                '>' => self.memory.shiftRight() catch |err| {
+                    switch (err) {
+                        mem.MemoryPanic.RangeUnderflow => report("A shift left instruction caused an underflow at position", opcode, diagnostics),
+                        mem.MemoryPanic.ShiftOperationError => report("An undefined behaviour occurred while performing a shift left operation at position ", opcode, diagnostics),
+                        else => {},
+                    }
+                    return err;
+                },
+                '+' => try self.memory.increment(),
+                '-' => try self.memory.decrement(),
+                ']' => {
+                    const cell_value = self.memory.read() catch |er| {
+                        report("Impossible to evaluate jump. A problem occurred while accessing the current memory cell.", pc, diagnostics);
+                        return er;
+                    };
+                    if (cell_value > 0) {
+                        if (mapping.get(pc)) |matching_pos| {
+                            pc = matching_pos;
+                            continue;
+                        } else {
+                            report("Impossible to find a match for the closing bracket", pc, diagnostics);
+                            return InterpreterPanic.UnmappedJumpOperation;
+                        }
+                    }
+                },
+                '[' => {
+                    const cell_value = self.memory.read() catch |er| {
+                        report("Impossible to evaluate jump. A problem occurred while accessing the current memory cell.", pc, diagnostics);
+                        return er;
+                    };
+                    if (cell_value == 0) {
+                        if (mapping.get(pc)) |matching_pos| {
+                            pc = matching_pos;
+                            continue;
+                        } else {
+                            report("Impossible to find a match for the opening bracket", pc, diagnostics);
+                            return InterpreterPanic.UnmappedJumpOperation;
+                        }
+                    }
+                },
+                '.' => {
+                    const cell_value = self.memory.read() catch |er| {
+                        report("Impossible to output value. A problem occurred while accessing the current memory cell.", pc, diagnostics);
+                        return er;
+                    };
+                    try output.writeByte(cell_value);
+                },
+                ',' => {
+                    const byte = input.readByte() catch 0;
+                    try self.memory.write(byte);
+                },
+                else => {
+                    //every other symbol MUST be ignored and should be interpreted as comments
+                },
             }
+            pc += 1;
         }
     }
 };
 
-test "empty program should not register any jump mappings" {
+test "mapJumpOperations - empty program should not register any jump mappings" {
     const givenProgram = "";
     const expected = 0;
 
@@ -219,7 +202,7 @@ test "empty program should not register any jump mappings" {
     try testing.expect(expected == mapping.count());
 }
 
-test "balanced brackets: program with deep structure must result in hashmap with all 'linked jumps'" {
+test "mapJumpOperations - balanced brackets: program with deep structure must result in hashmap with all 'linked jumps'" {
     const givenProgram = "[[[[[[[[[[[]]]]]]]]]][[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]][[[[[[[[[]]]]]]]]]][[[[[[[[[[]]]]]]]]]][[[[[[[[[[]]]]]]]]]][[[[[]]]]]";
     const expectedLinks = 150;
 
@@ -231,7 +214,7 @@ test "balanced brackets: program with deep structure must result in hashmap with
     try testing.expectEqual(expectedLinks, mapping.count());
 }
 
-test "balanced brackets: program with simple structure should result in hashmap with 'linked jumps'" {
+test "mapJumpOperations - balanced brackets: program with simple structure should result in hashmap with 'linked jumps'" {
     const givenProgram = "[+]";
 
     var mapping = std.AutoHashMap(usize, usize).init(testing.allocator);
@@ -243,7 +226,7 @@ test "balanced brackets: program with simple structure should result in hashmap 
     try testing.expectEqual(0, mapping.get(2).?);
 }
 
-test "unbalanced brackets: must result in error" {
+test "mapJumpOperations - unbalanced brackets: must result in error" {
     const givenProgram = "++[++++><><><>><+++<<-][+[]>++++";
     const expectedPosition: usize = 23;
 
@@ -255,7 +238,7 @@ test "unbalanced brackets: must result in error" {
     try testing.expectEqual(expectedPosition, diag.failed_opcode);
 }
 
-test "unbalanced brackets: inverted jump opcodes must result in error" {
+test "mapJumpOperations - unbalanced brackets: inverted jump opcodes must result in error" {
     const givenProgram = "+][.";
     var diag = InterpreterDiagnostics{ .detailed_message = undefined, .failed_opcode = undefined };
     var mapping = std.AutoHashMap(usize, usize).init(testing.allocator);
@@ -265,7 +248,7 @@ test "unbalanced brackets: inverted jump opcodes must result in error" {
     try testing.expectEqual(1, diag.failed_opcode);
 }
 
-test "report errors: setting values must work" {
+test "report - setting values must work" {
     var diag = InterpreterDiagnostics{ .detailed_message = undefined, .failed_opcode = 0 };
     const expectedMessage = "an diag message";
     const failedIndex = 82;
@@ -275,7 +258,7 @@ test "report errors: setting values must work" {
     try testing.expectEqual(failedIndex, diag.failed_opcode);
 }
 
-test "eval 'hello world' program should output correctly" {
+test "eval - 'hello world' program should output correctly" {
     const givenProgram = ">++++++++[<+++++++++>-]<.>++++[<+++++++>-]<+.+++++++..+++.>>++++++[<+++++++>-]<++.------------.>++++++[<+++++++++>-]<+.<.+++.------.--------.>>>++++[<++++++++>-]<+.";
 
     var output = std.ArrayList(u8).init(testing.allocator);
@@ -292,16 +275,20 @@ test "eval 'hello world' program should output correctly" {
     try testing.expectEqualStrings("Hello, World!", actualString);
 }
 
-test "loadProgram on an empty path should return an error" {
+test "loadProgram - on an empty path should return an error" {
     //given an empty path should result in error
-    try testing.expectError(std.fs.File.OpenError.FileNotFound, loadProgram(testing.allocator, ""));
+    try testing.expectError(error.FileNotFound, loadProgram(testing.allocator, ""));
 }
 
-test "loadProgram on an non existant path should return an error" {
+test "loadProgram - on an non existant path should return an error" {
     const unvalid_path = "./x/y/mockery.bf";
 
     //given an non-existant path should result in error
-    try testing.expectError(std.fs.File.OpenError.FileNotFound, loadProgram(testing.allocator, unvalid_path));
+    try testing.expectError(error.FileNotFound, loadProgram(testing.allocator, unvalid_path));
+}
+
+test "loadProgram - on a directory should return an error" {
+    try testing.expectError(error.CannotLoadProgramFromDirectory, loadProgram(testing.allocator, "./examples/"));
 }
 
 fn mkTestFile(tempDir: testing.TmpDir, name: []const u8, content: []const u8) !std.fs.File {
@@ -310,7 +297,7 @@ fn mkTestFile(tempDir: testing.TmpDir, name: []const u8, content: []const u8) !s
     return tempFile;
 }
 
-test "loadProgram on a valid file should read program content" {
+test "loadProgram -  on a valid file should read program content" {
     var tmp_dir = testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 

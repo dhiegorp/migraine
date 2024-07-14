@@ -20,5 +20,5 @@ pub const MemoryPanic = error{
 };
 
 test {
-    _ = static_memory;
+    std.testing.refAllDecls(@This());
 }
