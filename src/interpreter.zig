@@ -6,7 +6,10 @@ const Allocator = std.mem.Allocator;
 const testing = std.testing;
 const mem = @import("memory.zig");
 
-pub const InterpreterDiagnostics = struct { failed_opcode: usize, detailed_message: []const u8 };
+pub const InterpreterDiagnostics = struct {
+    failed_opcode: ?usize = null,
+    detailed_message: ?[]const u8 = null,
+};
 
 const InterpreterPanic = error{
     UnbalancedJumpOperation,
@@ -178,6 +181,7 @@ pub const Interpreter = struct {
                     try output.writeByte(cell_value);
                 },
                 ',' => {
+                    try output.print("\n\tin: ", .{});
                     const byte = input.readByte() catch 0;
                     try self.memory.write(byte);
                 },
@@ -230,7 +234,7 @@ test "mapJumpOperations - unbalanced brackets: must result in error" {
     const givenProgram = "++[++++><><><>><+++<<-][+[]>++++";
     const expectedPosition: usize = 23;
 
-    var diag = InterpreterDiagnostics{ .detailed_message = undefined, .failed_opcode = undefined };
+    var diag = InterpreterDiagnostics{};
     var mapping = std.AutoHashMap(usize, usize).init(testing.allocator);
     defer mapping.deinit();
 
@@ -240,7 +244,7 @@ test "mapJumpOperations - unbalanced brackets: must result in error" {
 
 test "mapJumpOperations - unbalanced brackets: inverted jump opcodes must result in error" {
     const givenProgram = "+][.";
-    var diag = InterpreterDiagnostics{ .detailed_message = undefined, .failed_opcode = undefined };
+    var diag = InterpreterDiagnostics{};
     var mapping = std.AutoHashMap(usize, usize).init(testing.allocator);
     defer mapping.deinit();
 
@@ -249,12 +253,12 @@ test "mapJumpOperations - unbalanced brackets: inverted jump opcodes must result
 }
 
 test "report - setting values must work" {
-    var diag = InterpreterDiagnostics{ .detailed_message = undefined, .failed_opcode = 0 };
+    var diag = InterpreterDiagnostics{};
     const expectedMessage = "an diag message";
     const failedIndex = 82;
     report(expectedMessage, failedIndex, &diag);
 
-    try testing.expectEqualStrings(expectedMessage, diag.detailed_message);
+    try testing.expectEqualStrings(expectedMessage, diag.detailed_message.?);
     try testing.expectEqual(failedIndex, diag.failed_opcode);
 }
 

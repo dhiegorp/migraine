@@ -10,7 +10,19 @@ const ABOUT_OPTION = "about";
 ///
 /// InterpreterOptions represent the set of available commands
 ///
-pub const InterpreterOptions = struct { help: bool = false, file: ?[]const u8 = null, eval: ?[]const u8 = null, verbose: bool = false, size: ?usize = null, dyna: bool = false, input: ?[]const u8 = null, inputDec: ?[]const u8 = null, alwaysFlush: bool = true, buffered: bool = false, about: bool = false };
+pub const InterpreterOptions = struct {
+    help: bool = false,
+    file: ?[]const u8 = null,
+    eval: ?[]const u8 = null,
+    verbose: bool = false,
+    size: ?usize = null,
+    dyna: bool = false,
+    input: ?[]const u8 = null,
+    inputDec: ?[]const u8 = null,
+    alwaysFlush: bool = true,
+    buffered: bool = false,
+    about: bool = false,
+};
 
 ///
 /// Given a set of command line arguments, validate it matching the following patterns:
@@ -61,17 +73,15 @@ pub fn preProcessArguments(allocator: Allocator, stdErr: anytype, args: [][]cons
 ///
 pub fn processCmdArguments(argsMap: *std.StringHashMap(?[]const u8), options: *InterpreterOptions, stdErr: anytype) !void {
     if (argsMap.count() == 0) {
-        //if no args, show help
         options.help = true;
         return;
     }
-    if (argsMap.fetchRemove(HELP_OPTION)) |_| {
-        //if help flag is detected, stops right away
+    if (argsMap.contains(HELP_OPTION)) {
         options.help = true;
         return;
     }
 
-    if (argsMap.fetchRemove(ABOUT_OPTION)) |_| {
+    if (argsMap.contains(ABOUT_OPTION)) {
         options.about = true;
         return;
     }
@@ -79,24 +89,30 @@ pub fn processCmdArguments(argsMap: *std.StringHashMap(?[]const u8), options: *I
     inline for (std.meta.fields(@TypeOf(options.*))) |field| {
         if (argsMap.contains(field.name)) {
             const entry = argsMap.fetchRemove(field.name);
-            if (field.type == bool) {
-                if (entry) |e| {
+            if (entry) |e| {
+                if (field.type == bool) {
                     if (e.value) |val| {
                         @field(options, field.name) = std.mem.eql(u8, "true", val);
                     } else {
                         @field(options, field.name) = true;
                     }
-                } else {
-                    try stdErr.print("\nError: Expected value not assigned to option '--{s}'!", .{field.name});
-                    return error.InvalidArgumentFound;
-                }
-            } else if (field.type == ?[]const u8) {
-                if (entry) |e| {
+                } else if (field.type == ?[]const u8) {
                     @field(options, field.name) = e.value;
-                } else {
-                    try stdErr.print("\nError: Expected value not assigned to option '--{s}'!", .{field.name});
-                    return error.InvalidArgumentFound;
+                } else if (field.type == ?usize) {
+                    if (e.value) |val| {
+                        if (std.fmt.parseInt(usize, val, 10)) |v| {
+                            @field(options, field.name) = v;
+                        } else |er| {
+                            try stdErr.print("\n{}: Value assigned '{s}' is invalid for '--{s}'! ", .{ er, field.name, val });
+                            return error.InvalidArgumentFound;
+                        }
+                    } else {
+                        @field(options, field.name) = null;
+                    }
                 }
+            } else {
+                try stdErr.print("\nError: Expected value not assigned to option '--{s}'!", .{field.name});
+                return error.InvalidArgumentFound;
             }
         }
     }
@@ -306,11 +322,7 @@ test "processCmdArguments - when argsMap has help and other options, help has pr
 
 test "processCmdArguments - when argsMap has help option then should set options.help to true" {
     var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
-    defer {
-        var keys = argsMap.keyIterator();
-        while (keys.next()) |k| std.testing.allocator.free(k.*);
-        argsMap.deinit();
-    }
+    defer argsMap.deinit();
 
     try argsMap.putNoClobber(HELP_OPTION, null);
 
@@ -331,11 +343,7 @@ test "processCmdArguments - when argsMap has help option then should set options
 
 test "processCmdArguments - when argsMap has about option then should set options.about to true" {
     var argsMap = std.StringHashMap(?[]const u8).init(std.testing.allocator);
-    defer {
-        var keys = argsMap.keyIterator();
-        while (keys.next()) |k| std.testing.allocator.free(k.*);
-        argsMap.deinit();
-    }
+    defer argsMap.deinit();
 
     try argsMap.putNoClobber(ABOUT_OPTION, null);
 

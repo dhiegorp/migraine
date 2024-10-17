@@ -4,15 +4,15 @@ Usage:
 Global Options:
     --help          Print this help.
     --file          The brainfuck source-code file path
-    --eval          String is interpreted as a brainfuck program (Not Implemented)
+    --eval          String is interpreted as a brainfuck program
     --verbose       
     --about         
 
 Memory Related Options:
-    --size          The memory size in KBytes. The default size is the same as the original 
-                    brainfuck interpreter (30KB) (Not Implemented)
+    --size          The memory size in Bytes. The default size is the same as the original 
+                    brainfuck interpreter (30KB).
 
-    --dyna          Instantiate memory dynamically without any fixed length. (Not Implemented)
+    --dyna          Instantiate memory dynamically without any fixed bound. (Not Implemented)
         
 Input Related Options:
     --input         Non interactive mode. Pass all the input needed 
