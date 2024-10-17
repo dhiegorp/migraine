@@ -119,7 +119,7 @@ pub fn processCmdArguments(argsMap: *std.StringHashMap(?[]const u8), options: *I
 
     //check if there are any arguments left, which means its an error and generate some error messages!
     if (argsMap.count() > 0) {
-        //still there are arguments not processed, so removeAll entries printing errors
+        //still not processed, so removeAll entries and print errors
         try stdErr.print("Error: option(s) found without resolution:\n\t", .{});
         var keys = argsMap.keyIterator();
         while (keys.next()) |key| {
