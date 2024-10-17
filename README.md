@@ -63,6 +63,6 @@ Migraine 0.0.2a
 ```
 
 ## Examples (Credits)
-Some of the .bf files contained at 'examples' diretory are not made by me. This section is to give credits to whom are due.
+Some of the .bf files contained at 'examples' directory are not made by me. This section is to give credits to whom are due.
 + './examples/mandelbrot.bf' : https://github.com/erikdubbelboer/brainfuck-jit
 + './examples/ola_mundo.bf': https://pt.wikipedia.org/wiki/Brainfuck
