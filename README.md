@@ -24,7 +24,7 @@ Usage:
 Global Options:
     --help          Print this help.
     --file          The brainfuck source-code file path
-    --eval          String is interpreted as a brainfuck program (Not Implemented)
+    --eval          String is interpreted as a brainfuck program
     --verbose       
     --about         
 
