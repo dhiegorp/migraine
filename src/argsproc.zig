@@ -25,7 +25,7 @@ pub const InterpreterOptions = struct {
 };
 
 ///
-/// Given a set of command line arguments, validate it matching the following patterns:
+/// Given a set of command line arguments, validate them matching the following patterns:
 ///  - options passed without values --<OPTION_VALUE> are stored as an entry in which K = <OPTION_NAME> and V = null; e.g, "--help"
 ///  - options with values following the pattern --<OPTION_NAME>=<VALUE> are stored as an entry in which K = <OPTION_NAME> and V=<VALUE>; e.g. "--file=example.bf"
 ///  - options followed by an equal sign and no value result in error; e.g. "--file="
@@ -68,7 +68,7 @@ pub fn preProcessArguments(allocator: Allocator, stdErr: anytype, args: [][]cons
 /// The command line arguments must match the struct`s attributes name and The type of each attribute determines how it will be parsed, although
 /// an error is not returned for a invalid value; e.g. --help=1234 , a bool attribute associated with an option mapped with an invalid value would
 /// result in false instead of an error.
-/// Another case of error is when the argsMap still has entries after the InterpreterOptions attributes` loop -- which means that invalid options
+/// Another error case is when the argsMap still has entries after the InterpreterOptions attributes` loop -- which means that invalid options
 /// were passed.
 ///
 pub fn processCmdArguments(argsMap: *std.StringHashMap(?[]const u8), options: *InterpreterOptions, stdErr: anytype) !void {
