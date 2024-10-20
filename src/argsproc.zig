@@ -116,10 +116,14 @@ pub fn processCmdArguments(argsMap: *std.StringHashMap(?[]const u8), options: *I
             }
         }
     }
+    try checkLeftovers(argsMap, stdErr);
+}
 
-    //check if there are any arguments left, which means its an error and generate some error messages!
+///
+/// check if there are any arguments left, which means its an error and generate some error messages!
+///
+pub fn checkLeftovers(argsMap: *std.StringHashMap(?[]const u8), stdErr: anytype) !void {
     if (argsMap.count() > 0) {
-        //still not processed, so removeAll entries and print errors
         try stdErr.print("Error: option(s) found without resolution:\n\t", .{});
         var keys = argsMap.keyIterator();
         while (keys.next()) |key| {
