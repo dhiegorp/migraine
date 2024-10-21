@@ -110,20 +110,9 @@ pub const Interpreter = struct {
         self.allocator.destroy(self);
     }
 
-    ///
-    /// Execute the given program.
-    /// Ideally it should use a 'step' function to allow 'interactive debugging'.
-    ///
-    pub fn eval(self: *Interpreter, program: []const u8, input: anytype, output: anytype, diagnostics: ?*InterpreterDiagnostics) anyerror!void {
-        var mapping = std.AutoHashMap(usize, usize).init(self.allocator);
-        defer mapping.deinit();
-
-        try mapJumpOperations(self.allocator, &mapping, program, diagnostics);
-
-        var pc: usize = 0;
-
-        while (pc < program.len) {
-            const opcode = program[pc];
+    pub fn step(self: *Interpreter, program: []const u8, mapping: anytype, input: anytype, output: anytype, diagnostics: ?*InterpreterDiagnostics, instr_pointer: *usize) anyerror!void {
+        if (instr_pointer.* < program.len) {
+            const opcode = program[instr_pointer.*];
             switch (opcode) {
                 '<' => self.memory.shiftLeft() catch |err| {
                     switch (err) {
@@ -145,37 +134,37 @@ pub const Interpreter = struct {
                 '-' => try self.memory.decrement(),
                 ']' => {
                     const cell_value = self.memory.read() catch |er| {
-                        report("Impossible to evaluate jump. A problem occurred while accessing the current memory cell.", pc, diagnostics);
+                        report("Impossible to evaluate jump. A problem occurred while accessing the current memory cell.", instr_pointer.*, diagnostics);
                         return er;
                     };
                     if (cell_value > 0) {
-                        if (mapping.get(pc)) |matching_pos| {
-                            pc = matching_pos;
-                            continue;
+                        if (mapping.get(instr_pointer.*)) |matching_pos| {
+                            instr_pointer.* = matching_pos;
+                            return;
                         } else {
-                            report("Impossible to find a match for the closing bracket", pc, diagnostics);
+                            report("Impossible to find a match for the closing bracket", instr_pointer.*, diagnostics);
                             return InterpreterPanic.UnmappedJumpOperation;
                         }
                     }
                 },
                 '[' => {
                     const cell_value = self.memory.read() catch |er| {
-                        report("Impossible to evaluate jump. A problem occurred while accessing the current memory cell.", pc, diagnostics);
+                        report("Impossible to evaluate jump. A problem occurred while accessing the current memory cell.", instr_pointer.*, diagnostics);
                         return er;
                     };
                     if (cell_value == 0) {
-                        if (mapping.get(pc)) |matching_pos| {
-                            pc = matching_pos;
-                            continue;
+                        if (mapping.get(instr_pointer.*)) |matching_pos| {
+                            instr_pointer.* = matching_pos;
+                            return;
                         } else {
-                            report("Impossible to find a match for the opening bracket", pc, diagnostics);
+                            report("Impossible to find a match for the opening bracket", instr_pointer.*, diagnostics);
                             return InterpreterPanic.UnmappedJumpOperation;
                         }
                     }
                 },
                 '.' => {
                     const cell_value = self.memory.read() catch |er| {
-                        report("Impossible to output value. A problem occurred while accessing the current memory cell.", pc, diagnostics);
+                        report("Impossible to output value. A problem occurred while accessing the current memory cell.", instr_pointer.*, diagnostics);
                         return er;
                     };
                     try output.writeByte(cell_value);
@@ -189,7 +178,24 @@ pub const Interpreter = struct {
                     //every other symbol MUST be ignored and should be interpreted as comments
                 },
             }
-            pc += 1;
+        }
+    }
+
+    ///
+    /// Execute the given program.
+    /// Ideally it should use a 'step' function to allow 'interactive debugging'.
+    ///
+    pub fn eval(self: *Interpreter, program: []const u8, input: anytype, output: anytype, diagnostics: ?*InterpreterDiagnostics) anyerror!void {
+        var mapping = std.AutoHashMap(usize, usize).init(self.allocator);
+        defer mapping.deinit();
+
+        try mapJumpOperations(self.allocator, &mapping, program, diagnostics);
+        var init_counter: usize = 0;
+        const pc: *usize = &init_counter;
+
+        while (pc.* < program.len) {
+            try step(self, program, &mapping, input, output, diagnostics, pc);
+            pc.* += 1;
         }
     }
 };
